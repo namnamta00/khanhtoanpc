@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build Windows app",
+      "type": "process",
+      "command": "C:/Users/hello/AppData/Local/Programs/Python/Python312/python.exe",
+      "args": ["-m", "PyInstaller", "--noconfirm", "--windowed", "--onedir", "--name", "KhanhToanStudio", "--distpath", "dist/StudioMedia", "--collect-all", "customtkinter", "--collect-all", "imageio_ffmpeg", "main.py"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Test app",
+      "type": "process",
+      "command": "C:/Users/hello/AppData/Local/Programs/Python/Python312/python.exe",
+      "args": ["-m", "unittest", "test_app", "-v"],
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
