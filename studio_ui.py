@@ -2,6 +2,7 @@
 import tkinter as tk
 import customtkinter as ctk
 from media_list import MediaList
+from connection_options import AI_MODELS, FACEBOOK_PAGES, GRAPH_API_VERSIONS
 
 ctk.set_appearance_mode('light')
 ctk.set_default_color_theme('green')
@@ -71,7 +72,7 @@ class StudioUI:
         self.label(options, 'Yêu cầu thêm (tùy chọn)', bold=True).pack(anchor='w', padx=20, pady=(4, 6))
         self.extra = ctk.CTkTextbox(options, height=75, corner_radius=12, fg_color='#F3F6F3', font=('Segoe UI', 14), wrap='word')
         self.extra.pack(fill='x', padx=20, pady=(0, 12))
-        ctk.CTkOptionMenu(options, variable=self.vars['provider'], values=['GPT / OpenAI', 'Gemini'],
+        ctk.CTkOptionMenu(options, variable=self.vars['provider'], values=list(AI_MODELS),
                           height=38, corner_radius=10, fg_color=ACCENT).pack(fill='x', padx=20, pady=(0, 12))
         ctk.CTkSwitch(options, text='Dùng AI viết bài', variable=self.ai_text, progress_color=ACCENT).pack(anchor='w', padx=20)
         self.label(options, 'Tắt: bài mẫu miễn phí. Bật: cần API key có hạn mức.', 12, wraplength=370, justify='left').pack(anchor='w', padx=20, pady=(6, 12))
@@ -99,7 +100,8 @@ class StudioUI:
             row.pack(fill='x', padx=20, pady=8)
             self.label(row, title).pack(side='left', padx=(0, 16))
             ctk.CTkOptionMenu(row, variable=self.vars[key], values=[str(i) for i in range(maximum+1)]).pack(side='left')
-        ctk.CTkSwitch(panel, text='Dùng AI tạo ảnh minh họa', variable=self.ai_images).pack(anchor='w', padx=20, pady=10)
+        self.ai_images_switch = ctk.CTkSwitch(panel, text='Dùng AI tạo ảnh minh họa', variable=self.ai_images)
+        self.ai_images_switch.pack(anchor='w', padx=20, pady=10)
         self.photo_label = self.label(panel, 'Chưa chọn ảnh gốc')
         self.photo_label.pack(anchor='w', padx=20)
         self.button(panel, 'Chọn ảnh gốc', self.pick_photos, True).pack(anchor='w', padx=20, pady=8)
@@ -127,24 +129,37 @@ class StudioUI:
         panel.grid_columnconfigure(1, weight=1)
         self.label(panel, 'Kết nối dịch vụ', 22, True).grid(row=0, column=0, columnspan=2, sticky='w', padx=24, pady=20)
         self.label(panel, 'Dịch vụ AI').grid(row=1, column=0, padx=24, sticky='w')
-        ctk.CTkOptionMenu(panel, variable=self.vars['provider'], values=['GPT / OpenAI', 'Gemini']).grid(row=1, column=1, sticky='ew', padx=24, pady=8)
+        ctk.CTkOptionMenu(panel, variable=self.vars['provider'], values=list(AI_MODELS)).grid(row=1, column=1, sticky='ew', padx=24, pady=8)
         fields = [('API key', 'key'), ('Model viết bài', 'text_model'), ('Model tạo ảnh', 'image_model'),
-                  ('Facebook Page ID', 'page'), ('Page Access Token', 'token'), ('Phiên bản Graph API', 'version')]
+                  ('Fanpage', 'page_choice'), ('Facebook Page ID', 'page'),
+                  ('Page Access Token', 'token'), ('Phiên bản Graph API', 'version')]
         self.ai_entries = {}
         for index, (title, key) in enumerate(fields, 2):
             label = self.label(panel, title)
             label.grid(row=index, column=0, sticky='w', padx=24, pady=10)
-            entry = ctk.CTkEntry(panel, textvariable=self.vars[key], show='•' if key in ('key', 'token') else '', corner_radius=12, height=42)
+            if key in ('text_model', 'image_model', 'page_choice', 'version'):
+                values = (list(FACEBOOK_PAGES) if key == 'page_choice' else
+                          GRAPH_API_VERSIONS if key == 'version' else
+                          AI_MODELS[self.vars['provider'].get()][key])
+                entry = ctk.CTkOptionMenu(panel, variable=self.vars[key], values=values or [''],
+                                          state='normal' if values else 'disabled',
+                                          corner_radius=12, height=42, dynamic_resizing=False)
+            else:
+                entry = ctk.CTkEntry(panel, textvariable=self.vars[key], show='•' if key in ('key', 'token') else '',
+                                    state='readonly' if key == 'page' else 'normal', corner_radius=12, height=42)
             entry.grid(row=index, column=1, sticky='ew', padx=24, pady=10)
             if key in ('key', 'text_model', 'image_model'):
                 self.ai_entries[key] = (label, entry)
         self.vars['provider'].trace_add('write', self.provider_changed)
         self.provider_changed()
-        self.button(panel, 'Kiểm tra fanpage', self.check_page, True).grid(row=8, column=1, sticky='ew', padx=24, pady=10)
+        self.vars['page_choice'].trace_add('write', self.page_changed)
+        self.page_changed()
+        self.button(panel, 'Kiểm tra fanpage', self.check_page, True).grid(row=9, column=1, sticky='ew', padx=24, pady=10)
         self.label(panel, 'Chỉ tạo văn bản không cần kết nối Facebook.\n'
-                   'API key chỉ giữ trong phiên chạy. GPT qua API cần số dư riêng với ChatGPT Plus.\n'
+                   'Danh sách page, model và phiên bản API: sửa connection_options.py rồi mở lại ứng dụng.\n'
+                   'API key nhập trực tiếp chỉ giữ trong phiên chạy. GPT qua API cần số dư riêng với ChatGPT Plus.\n'
                    'Kết quả lưu trong Documents/KhanhToanStudio. Ảnh AI cần kiểm tra trước khi sử dụng.',
-                   14, justify='left', wraplength=800).grid(row=9, column=0, columnspan=2, sticky='w', padx=24, pady=20)
+                   14, justify='left', wraplength=800).grid(row=10, column=0, columnspan=2, sticky='w', padx=24, pady=20)
 
     def copy_post(self):
         content = self.post.get('1.0', 'end').strip()

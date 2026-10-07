@@ -105,12 +105,37 @@ def openai_generate(key, model, prompt, images=False):
     return result
 
 
+def claude_generate(key, model, prompt, images=False):
+    if images:
+        raise ValueError('Claude không hỗ trợ tạo ảnh. Hãy chọn dịch vụ khác để tạo ảnh AI.')
+    if not key.strip() or not re.fullmatch(r'[A-Za-z0-9._-]+', model):
+        raise ValueError('Nhập Claude API key và chọn model hợp lệ trong tab Kết nối.')
+    try:
+        response = requests.post('https://api.anthropic.com/v1/messages',
+                                 headers={'x-api-key': key.strip(), 'anthropic-version': '2023-06-01'},
+                                 json={'model': model, 'max_tokens': 8192,
+                                       'messages': [{'role': 'user', 'content': prompt}]},
+                                 timeout=(15, 300))
+    except requests.RequestException:
+        raise RuntimeError('Không kết nối được Claude. Kiểm tra Internet; yêu cầu có thể đã được tính phí, hãy kiểm tra trước khi thử lại.') from None
+    data = checked(response, 'Claude')
+    if data.get('stop_reason') not in ('end_turn', 'stop_sequence'):
+        raise RuntimeError('Claude chưa hoàn thành nội dung hoặc đã từ chối yêu cầu. Hãy đổi mô tả hoặc model.')
+    result = '\n'.join(part.get('text', '') for part in data.get('content', [])
+                       if part.get('type') == 'text').strip()
+    if not result:
+        raise RuntimeError('Claude chưa trả về nội dung. Hãy đổi mô tả hoặc model.')
+    return result
+
+
 def generate_ai(provider, key, model, prompt, images=False):
     if provider == 'GPT / OpenAI':
         return openai_generate(key, model, prompt, images)
     if provider == 'Gemini':
         return gemini(key, model, prompt, images)
-    raise ValueError('Hãy chọn GPT / OpenAI hoặc Gemini.')
+    if provider == 'Claude':
+        return claude_generate(key, model, prompt, images)
+    raise ValueError('Hãy chọn GPT / OpenAI, Gemini hoặc Claude.')
 
 
 def facebook_error(response, data, stage, token):

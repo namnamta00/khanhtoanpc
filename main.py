@@ -18,6 +18,7 @@ from studio_ui import StudioUI
 from media import card, slideshow
 from services import Facebook, generate_ai
 from media_selection import MediaSelection, facebook_media_plan
+from connection_options import AI_MODELS, FACEBOOK_PAGES, GRAPH_API_VERSIONS, PROVIDER_PREFIXES
 
 
 class App(StudioUI, ctk.CTk):
@@ -35,12 +36,17 @@ class App(StudioUI, ctk.CTk):
         self.busy = False
         self.events = queue.Queue()
         self.vars = {key: tk.StringVar(value=value) for key, value in {
-            'product_name': '', 'product_price': '', 'search': '', 'images': '0', 'videos': '0', 'page': os.getenv('FACEBOOK_PAGE_ID', ''),
-            'token': os.getenv('FACEBOOK_PAGE_TOKEN', ''), 'version': 'v24.0',
-            'key': os.getenv('GEMINI_API_KEY', ''), 'text_model': 'gemini-2.5-flash',
-            'provider': 'GPT / OpenAI', 'openai_key': os.getenv('OPENAI_API_KEY', ''),
-            'openai_text_model': 'gpt-5.6-terra', 'openai_image_model': 'gpt-image-2.5-flare',
-            'image_model': 'gemini-2.5-flash-image', 'mode': 'Bài viết kèm ảnh',
+            'product_name': '', 'product_price': '', 'search': '', 'images': '0', 'videos': '0', 'page': '',
+            'page_choice': next(iter(FACEBOOK_PAGES), ''),
+            'token': '', 'version': next(iter(GRAPH_API_VERSIONS), ''),
+            'key': os.getenv('GEMINI_API_KEY', ''), 'text_model': next(iter(AI_MODELS['Gemini']['text_model']), ''),
+            'provider': 'GPT / OpenAI', 'openai_key': AI_MODELS['GPT / OpenAI'].get('api_key', os.getenv('OPENAI_API_KEY', '')),
+            'openai_text_model': next(iter(AI_MODELS['GPT / OpenAI']['text_model']), ''),
+            'openai_image_model': next(iter(AI_MODELS['GPT / OpenAI']['image_model']), ''),
+            'claude_key': os.getenv('ANTHROPIC_API_KEY', ''),
+            'claude_text_model': next(iter(AI_MODELS.get('Claude', {}).get('text_model', [])), ''),
+            'claude_image_model': '',
+            'image_model': next(iter(AI_MODELS['Gemini']['image_model']), ''), 'mode': 'Bài viết kèm ảnh',
             'status': 'Nhập tên sản phẩm và mô tả để bắt đầu.',
         }.items()}
         self.ai_text = tk.BooleanVar(value=False)
@@ -51,11 +57,29 @@ class App(StudioUI, ctk.CTk):
 
     def provider_changed(self, *_args):
         provider = self.vars['provider'].get()
-        prefix = 'openai_' if provider == 'GPT / OpenAI' else ''
+        prefix = PROVIDER_PREFIXES[provider]
         for key, (label, entry) in self.ai_entries.items():
-            entry.configure(textvariable=self.vars[prefix + key])
             if key == 'key':
+                entry.configure(textvariable=self.vars[prefix + key])
                 label.configure(text=f'{provider} API key')
+            else:
+                values = AI_MODELS[provider][key]
+                variable = self.vars[prefix + key]
+                if variable.get() not in values:
+                    variable.set(next(iter(values), ''))
+                entry.configure(variable=variable, values=values or [''],
+                                state='normal' if values else 'disabled')
+                label.configure(text=('Model tạo ảnh · Không hỗ trợ' if not values else 'Model tạo ảnh')
+                                if key == 'image_model' else 'Model viết bài')
+        supports_images = bool(AI_MODELS[provider]['image_model'])
+        if not supports_images:
+            self.ai_images.set(False)
+        self.ai_images_switch.configure(state='normal' if supports_images else 'disabled')
+
+    def page_changed(self, *_args):
+        page = FACEBOOK_PAGES.get(self.vars['page_choice'].get(), {})
+        self.vars['page'].set(page.get('page_id', ''))
+        self.vars['token'].set(page.get('token', ''))
 
     def run_job(self, label, work, done):
         if self.busy:
@@ -119,15 +143,18 @@ class App(StudioUI, ctk.CTk):
         use_text, use_images = self.ai_text.get(), self.ai_images.get()
         sources = self.source_photos.copy()
         provider = settings['provider']
-        prefix = 'openai_' if provider == 'GPT / OpenAI' else ''
+        prefix = PROVIDER_PREFIXES[provider]
         api_key = settings[prefix + 'key']
         text_model = settings[prefix + 'text_model']
         image_model = settings[prefix + 'image_model']
+        if use_images and not AI_MODELS[provider]['image_model']:
+            messagebox.showwarning('Không hỗ trợ tạo ảnh', f'{provider} chỉ hỗ trợ tạo văn bản. Hãy tắt tạo ảnh AI hoặc chọn dịch vụ khác.')
+            return
         if (use_text or use_images) and not api_key:
             messagebox.showwarning('Thiếu API key', f'Nhập API key của {provider} trong tab Kết nối hoặc tắt tùy chọn AI.')
             return
         if (use_text and not text_model) or (use_images and not image_model):
-            messagebox.showwarning('Thiếu model', f'Nhập tên model của {provider} trong tab Kết nối.')
+            messagebox.showwarning('Thiếu model', f'Chọn model của {provider} trong tab Kết nối; thêm lựa chọn trong connection_options.py nếu danh sách trống.')
             return
         if self.post.get('1.0', 'end').strip() and not messagebox.askyesno('Tạo bản mới', 'Tạo nội dung mới sẽ thay bài đang sửa. Tiếp tục?'):
             return
